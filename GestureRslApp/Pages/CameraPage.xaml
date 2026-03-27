@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:camera="clr-namespace:Camera.MAUI;assembly=Camera.MAUI"
+             x:Class="GestureRslApp.Pages.CameraPage"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackground}}"
+             Title="Камера">
+
+    <Grid RowDefinitions="*, Auto">
+
+        <!-- ── Верхняя часть: превью камеры ── -->
+        <Grid Grid.Row="0">
+
+            <!-- Виджет камеры на весь экран -->
+            <camera:CameraView
+                x:Name="CameraViewControl"
+                HorizontalOptions="Fill"
+                VerticalOptions="Fill"
+                 />
+
+            <!-- Рамка-подсказка: куда класть руку -->
+            <Frame
+                HorizontalOptions="Center"
+                VerticalOptions="Center"
+                WidthRequest="260"
+                HeightRequest="260"
+                CornerRadius="16"
+                BackgroundColor="Transparent"
+                BorderColor="#80FFFFFF"
+                InputTransparent="True" />
+
+            <!-- Подсказка сверху -->
+            <Border
+                HorizontalOptions="Center"
+                VerticalOptions="Start"
+                Margin="0,20,0,0"
+                BackgroundColor="#80000000"
+                StrokeShape="RoundRectangle 12"
+                Padding="14,6">
+                <Label
+                    Text="Поместите руку в рамку"
+                    TextColor="White"
+                    FontSize="{StaticResource FontSizeSmall}"
+                    HorizontalOptions="Center" />
+            </Border>
+
+            <!-- Индикатор загрузки модели -->
+            <VerticalStackLayout
+                x:Name="LoadingOverlay"
+                HorizontalOptions="Center"
+                VerticalOptions="Center"
+                Spacing="12"
+                IsVisible="True">
+                <ActivityIndicator
+                    IsRunning="True"
+                    Color="{StaticResource Primary}"
+                    WidthRequest="48"
+                    HeightRequest="48" />
+                <Label
+                    Text="Загрузка модели..."
+                    TextColor="White"
+                    FontSize="{StaticResource FontSizeMedium}"
+                    HorizontalOptions="Center" />
+            </VerticalStackLayout>
+
+        </Grid>
+
+        <!-- ── Нижняя панель результата ── -->
+        <Border
+            Grid.Row="1"
+            BackgroundColor="{StaticResource CardBackground}"
+            StrokeShape="RoundRectangle 24,24,0,0"
+            Stroke="Transparent"
+            Padding="24,20,24,32">
+
+            <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+
+                <!-- Распознанная буква -->
+                <Label
+                    x:Name="LetterLabel"
+                    Grid.Row="0"
+                    Text="—"
+                    FontSize="{StaticResource FontSizeLetter}"
+                    FontAttributes="Bold"
+                    TextColor="{StaticResource Primary}"
+                    HorizontalOptions="Center" />
+
+                <!-- Название буквы или статус -->
+                <Label
+                    x:Name="StatusLabel"
+                    Grid.Row="1"
+                    Text="Ожидание жеста..."
+                    FontSize="{StaticResource FontSizeMedium}"
+                    TextColor="{StaticResource SecondaryText}"
+                    HorizontalOptions="Center" />
+
+                <!-- Индикатор уверенности -->
+                <Grid Grid.Row="2"
+                      ColumnDefinitions="Auto,*,Auto"
+                      ColumnSpacing="10"
+                      Margin="0,4,0,0">
+
+                    <Label
+                        Grid.Column="0"
+                        Text="Уверенность"
+                        FontSize="{StaticResource FontSizeSmall}"
+                        TextColor="{StaticResource SecondaryText}"
+                        VerticalOptions="Center" />
+
+                    <ProgressBar
+                        x:Name="ConfidenceBar"
+                        Grid.Column="1"
+                        Progress="0"
+                        ProgressColor="{StaticResource Primary}"
+                        VerticalOptions="Center" />
+
+                    <Label
+                        x:Name="ConfidenceLabel"
+                        Grid.Column="2"
+                        Text="0%"
+                        FontSize="{StaticResource FontSizeSmall}"
+                        FontAttributes="Bold"
+                        TextColor="{StaticResource Primary}"
+                        VerticalOptions="Center"
+                        MinimumWidthRequest="40" />
+                </Grid>
+
+            </Grid>
+        </Border>
+
+    </Grid>
+</ContentPage>

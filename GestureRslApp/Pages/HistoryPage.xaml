@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="GestureRslApp.Pages.HistoryPage"
+             BackgroundColor="{StaticResource PageBackground}"
+             Title="История">
+
+    <VerticalStackLayout
+        HorizontalOptions="Center"
+        VerticalOptions="Center"
+        Spacing="16"
+        Padding="32">
+
+        <!-- Иконка-заглушка -->
+        <Label
+            Text="📋"
+            FontSize="64"
+            HorizontalOptions="Center" />
+
+        <!-- Заголовок -->
+        <Label
+            Text="История пуста"
+            FontSize="{StaticResource FontSizeLarge}"
+            FontAttributes="Bold"
+            TextColor="{StaticResource PrimaryText}"
+            HorizontalOptions="Center" />
+
+        <!-- Описание -->
+        <Label
+            Text="Здесь будут отображаться распознанные жесты. Функция будет доступна в следующей версии."
+            FontSize="{StaticResource FontSizeMedium}"
+            TextColor="{StaticResource SecondaryText}"
+            HorizontalOptions="Center"
+            HorizontalTextAlignment="Center" />
+
+    </VerticalStackLayout>
+
+</ContentPage>

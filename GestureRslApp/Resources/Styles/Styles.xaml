@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- ─── Глобальные стили элементов ─── -->
+
+    <!-- Label: основной текст -->
+    <Style TargetType="Label">
+        <Setter Property="TextColor" Value="{StaticResource PrimaryText}" />
+        <Setter Property="FontFamily" Value="OpenSansRegular" />
+        <Setter Property="FontSize"   Value="{StaticResource FontSizeMedium}" />
+    </Style>
+
+    <!-- Shell: цвет нижней навигации -->
+    <Style TargetType="Shell" ApplyToDerivedTypes="True">
+        <Setter Property="Shell.BackgroundColor"          Value="{StaticResource CardBackground}" />
+        <Setter Property="Shell.ForegroundColor"          Value="{StaticResource Primary}" />
+        <Setter Property="Shell.TitleColor"               Value="{StaticResource PrimaryText}" />
+        <Setter Property="Shell.TabBarBackgroundColor"    Value="{StaticResource CardBackground}" />
+        <Setter Property="Shell.TabBarForegroundColor"    Value="{StaticResource Primary}" />
+        <Setter Property="Shell.TabBarTitleColor"         Value="{StaticResource Primary}" />
+        <Setter Property="Shell.TabBarUnselectedColor"    Value="{StaticResource SecondaryText}" />
+    </Style>
+
+    <!-- Button -->
+    <Style TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+        <Setter Property="TextColor"       Value="White" />
+        <Setter Property="CornerRadius"    Value="12" />
+        <Setter Property="FontSize"        Value="{StaticResource FontSizeMedium}" />
+        <Setter Property="FontAttributes"  Value="Bold" />
+        <Setter Property="Padding"         Value="20,12" />
+    </Style>
+
+    <!-- Switch -->
+    <Style TargetType="Switch">
+        <Setter Property="OnColor"   Value="{StaticResource Primary}" />
+        <Setter Property="ThumbColor" Value="White" />
+    </Style>
+
+    <!-- ProgressBar -->
+    <Style TargetType="ProgressBar">
+        <Setter Property="ProgressColor" Value="{StaticResource Primary}" />
+    </Style>
+
+    <!-- Entry -->
+    <Style TargetType="Entry">
+        <Setter Property="TextColor"       Value="{StaticResource PrimaryText}" />
+        <Setter Property="PlaceholderColor" Value="{StaticResource SecondaryText}" />
+    </Style>
+
+</ResourceDictionary>

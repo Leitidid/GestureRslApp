@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- ─── Тема высокого контраста (для слабовидящих) ─── -->
+    <!-- Принципы: чёрный текст на белом фоне, максимальный контраст, крупный шрифт -->
+
+    <!-- Акцент — чистый чёрный вместо фиолетового -->
+    <Color x:Key="Primary">#000000</Color>
+    <Color x:Key="PrimaryLight">#E0E0E0</Color>
+
+    <!-- Фоны — белый/почти белый -->
+    <Color x:Key="PageBackground">#FFFFFF</Color>
+    <Color x:Key="CardBackground">#F0F0F0</Color>
+
+    <!-- Текст — строго чёрный -->
+    <Color x:Key="PrimaryText">#000000</Color>
+    <Color x:Key="SecondaryText">#333333</Color>
+
+    <!-- Элементы -->
+    <Color x:Key="DividerColor">#000000</Color>
+    <Color x:Key="SuccessColor">#006600</Color>
+    <Color x:Key="WarningColor">#CC6600</Color>
+
+    <!-- Размеры шрифтов УВЕЛИЧЕНЫ для слабовидящих -->
+    <x:Double x:Key="FontSizeSmall">16</x:Double>
+    <x:Double x:Key="FontSizeMedium">20</x:Double>
+    <x:Double x:Key="FontSizeLarge">28</x:Double>
+    <x:Double x:Key="FontSizeLetter">96</x:Double>
+
+</ResourceDictionary>

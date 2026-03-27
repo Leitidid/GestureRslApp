@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="GestureRslApp.Pages.SettingsPage"
+             BackgroundColor="{StaticResource PageBackground}"
+             Title="Настройки">
+
+    <ScrollView>
+        <VerticalStackLayout Spacing="0" Padding="0,16,0,32">
+
+            <!-- ── Раздел: Отображение ── -->
+            <Label
+                Text="ОТОБРАЖЕНИЕ"
+                FontSize="{StaticResource FontSizeSmall}"
+                TextColor="{StaticResource SecondaryText}"
+                Margin="20,0,20,8"
+                FontAttributes="Bold" />
+
+            <!-- Карточка настроек -->
+            <Border
+                Margin="16,0"
+                BackgroundColor="{StaticResource CardBackground}"
+                StrokeShape="RoundRectangle 16"
+                Stroke="Transparent">
+
+                <VerticalStackLayout>
+
+                    <!-- Режим для слабовидящих 
+                    <Grid
+                        Padding="16,14"
+                        ColumnDefinitions="*,Auto">
+
+                        <VerticalStackLayout Grid.Column="0" Spacing="2">
+                            <Label
+                                Text="Режим для слабовидящих"
+                                FontSize="{StaticResource FontSizeMedium}"
+                                FontAttributes="Bold"
+                                TextColor="{StaticResource PrimaryText}" />
+                            <Label
+                                Text="Высокий контраст, крупный текст"
+                                FontSize="{StaticResource FontSizeSmall}"
+                                TextColor="{StaticResource SecondaryText}" />
+                        </VerticalStackLayout>
+
+                        <Switch
+                            x:Name="HighContrastSwitch"
+                            Grid.Column="1"
+                            OnColor="{StaticResource Primary}"
+                            VerticalOptions="Center"
+                             />
+                    </Grid>
+                   Toggled="OnHighContrastToggled"-->
+                    <!-- Разделитель -->
+                    <BoxView
+                        HeightRequest="1"
+                        Color="{StaticResource DividerColor}"
+                        Margin="16,0" />
+
+                    <!-- Подсказка о теме -->
+                    <Grid Padding="16,14" ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout Grid.Column="0" Spacing="2">
+                            <Label
+                                Text="Тема приложения"
+                                FontSize="{StaticResource FontSizeMedium}"
+                                FontAttributes="Bold"
+                                TextColor="{StaticResource PrimaryText}" />
+                            <Label
+                                Text="Светлая тема"
+                                FontSize="{StaticResource FontSizeSmall}"
+                                TextColor="{StaticResource SecondaryText}" />
+                        </VerticalStackLayout>
+                        <Label
+                            Grid.Column="1"
+                            Text="☀️"
+                            FontSize="24"
+                            VerticalOptions="Center" />
+                    </Grid>
+
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- ── Раздел: О приложении ── -->
+            <Label
+                Text="О ПРИЛОЖЕНИИ"
+                FontSize="{StaticResource FontSizeSmall}"
+                TextColor="{StaticResource SecondaryText}"
+                Margin="20,24,20,8"
+                FontAttributes="Bold" />
+
+            <Border
+                Margin="16,0"
+                BackgroundColor="{StaticResource CardBackground}"
+                StrokeShape="RoundRectangle 16"
+                Stroke="Transparent">
+
+                <VerticalStackLayout Padding="16,14" Spacing="8">
+                    <Label
+                        Text="Распознавание РЖЯ"
+                        FontSize="{StaticResource FontSizeMedium}"
+                        FontAttributes="Bold"
+                        TextColor="{StaticResource PrimaryText}" />
+                    <Label
+                        Text="Версия 1.0"
+                        FontSize="{StaticResource FontSizeSmall}"
+                        TextColor="{StaticResource SecondaryText}" />
+                    <Label
+                        Text="Дипломный проект — распознавание 5 букв дактильного алфавита Русского Жестового Языка на Android с помощью нейросети."
+                        FontSize="{StaticResource FontSizeSmall}"
+                        TextColor="{StaticResource SecondaryText}" />
+                    <Label
+                        Text="Поддерживаемые буквы: А, Б, В, Г, Д"
+                        FontSize="{StaticResource FontSizeSmall}"
+                        TextColor="{StaticResource Primary}"
+                        FontAttributes="Bold" />
+                </VerticalStackLayout>
+            </Border>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
