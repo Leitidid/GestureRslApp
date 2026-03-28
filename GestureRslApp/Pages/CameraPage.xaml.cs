@@ -7,15 +7,8 @@ namespace GestureRslApp.Pages;
 public partial class CameraPage : ContentPage
 {
     private readonly HandGestureRecognizer _recognizer;
-
-    // Флаг: идёт ли сейчас обработка кадра
-    // Защита от накопления кадров в очереди (дроп лишних)
-    private bool _isProcessingFrame;
-
-    // Счётчик пропускаемых кадров: обрабатываем каждый N-й кадр
-    // (для плавности UI — не нагружаем CPU каждым кадром)
-    private int _frameCounter;
-    private const int ProcessEveryNthFrame = 5;
+    private CancellationTokenSource? _frameTokenSource;
+    private const int FrameIntervalMs = 200; // Обработка каждые 200мс = 5 FPS
 
     public CameraPage(HandGestureRecognizer recognizer)
     {
@@ -23,13 +16,10 @@ public partial class CameraPage : ContentPage
         _recognizer = recognizer;
     }
 
-    // ─── Жизненный цикл страницы ──────────────────────────────────────────
-
     protected override async void OnAppearing()
     {
         base.OnAppearing();
 
-        // Запрашиваем разрешение на камеру при первом открытии
         var status = await Permissions.RequestAsync<Permissions.Camera>();
         if (status != PermissionStatus.Granted)
         {
@@ -37,7 +27,6 @@ public partial class CameraPage : ContentPage
             return;
         }
 
-        // Инициализируем ONNX-модели (только один раз)
         try
         {
             await _recognizer.InitializeAsync();
@@ -50,17 +39,19 @@ public partial class CameraPage : ContentPage
             return;
         }
 
-        // Запускаем камеру
         await StartCameraAsync();
+
+        // 🔥 Запускаем обработку кадров через таймер
+        _frameTokenSource = new CancellationTokenSource();
+        _ = ProcessFramesLoop(_frameTokenSource.Token);
     }
 
-    protected override async void OnDisappearing()
+    protected override void OnDisappearing()
     {
         base.OnDisappearing();
-        await StopCameraAsync();
+        _frameTokenSource?.Cancel();
+        StopCameraAsync();
     }
-
-    // ─── Управление камерой ───────────────────────────────────────────────
 
     private async Task StartCameraAsync()
     {
@@ -70,7 +61,6 @@ public partial class CameraPage : ContentPage
 
         if (CameraViewControl.Camera == null) return;
 
-        // Настройки камеры
         CameraViewControl.BarCodeDetectionEnabled = false;
         await CameraViewControl.StopCameraAsync();
         await CameraViewControl.StartCameraAsync();
@@ -81,94 +71,89 @@ public partial class CameraPage : ContentPage
         await CameraViewControl.StopCameraAsync();
     }
 
-    // ─── Обработка кадров с камеры ────────────────────────────────────────
-
-    /// <summary>
-    /// Вызывается Camera.MAUI каждый раз когда готов новый кадр.
-    /// Запускаем распознавание в фоне чтобы не блокировать UI-поток.
-    /// </summary>
-    private void OnCameraFrameReady(object sender, EventArgs e)
+    // 🔥 Новый метод: обработка кадров через таймер
+    // 🔥 Новый метод: обработка кадров через таймер
+    private async Task ProcessFramesLoop(CancellationToken token)
     {
-        _frameCounter++;
+        await Task.Delay(1000, token);
 
-        // Пропускаем кадры для снижения нагрузки на CPU
-        if (_frameCounter % ProcessEveryNthFrame != 0) return;
-
-        // Если предыдущий кадр ещё обрабатывается — пропускаем этот
-        if (_isProcessingFrame) return;
-        _isProcessingFrame = true;
-
-        // Запускаем обработку в фоновом потоке
-        Task.Run(async () =>
+        while (!token.IsCancellationRequested)
         {
             try
             {
-                // 🔥 Получаем кадр как Stream из Camera.MAUI
-                using Stream? photoStream = await CameraViewControl.TakePhotoAsync();
-                if (photoStream == null) return;
+                await Task.Delay(FrameIntervalMs, token);
 
-                // 🔥 Конвертируем Stream → byte[]
-                using var memoryStream = new MemoryStream();
-                await photoStream.CopyToAsync(memoryStream);
-                byte[] jpegBytes = memoryStream.ToArray();
+                // 🔥 Получаем кадр через SnapShotStream
+                // 🔥 Получаем кадр через SnapShotStream
+                var stream = CameraViewControl.SnapShotStream;
+                if (stream == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DEBUG] SnapShotStream is NULL");
+                    continue;
+                }
 
-                if (jpegBytes.Length == 0) return;
+                // 🔥 Читаем длину ДО копирования
+                long length = stream.Length;
+                if (length == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DEBUG] SnapShotStream is EMPTY");
+                    continue;
+                }
 
-                // Запускаем распознавание
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Frame: {length} bytes");
+
+                // 🔥 Копируем данные
+                byte[] jpegBytes;
+                using (var ms = new MemoryStream())
+                {
+                    await stream.CopyToAsync(ms);
+                    jpegBytes = ms.ToArray();
+                }
+
+                if (jpegBytes.Length == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DEBUG] JPEG bytes are EMPTY");
+                    continue;
+                }
+
+                // Распознавание
                 GestureResult result = _recognizer.Recognize(jpegBytes);
 
-                // Обновляем UI строго в главном потоке
+                // Обновление UI
                 await MainThread.InvokeOnMainThreadAsync(() => UpdateUI(result));
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
             catch (Exception ex)
             {
-                // Логируем ошибку (можно добавить серую зону для отладки)
-                System.Diagnostics.Debug.WriteLine($"[CameraPage] Error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] {ex.Message}");
             }
-            finally
-            {
-                _isProcessingFrame = false;
-            }
-        });
+        }
     }
-
-    // ─── Обновление интерфейса ────────────────────────────────────────────
-
-    /// <summary>
-    /// Обновляет букву, процент уверенности и прогресс-бар на экране.
-    /// </summary>
     private void UpdateUI(GestureResult result)
     {
         if (!result.HandDetected)
         {
-            LetterLabel.Text      = "—";
-            StatusLabel.Text      = "Рука не найдена";
+            LetterLabel.Text = "—";
+            StatusLabel.Text = "Рука не найдена";
             ConfidenceBar.Progress = 0;
-            ConfidenceLabel.Text  = "0%";
+            ConfidenceLabel.Text = "0%";
             LetterLabel.TextColor = GetResource<Color>("SecondaryText");
             return;
         }
 
-        // Выводим букву
-        LetterLabel.Text      = result.Letter;
+        LetterLabel.Text = result.Letter;
         LetterLabel.TextColor = GetResource<Color>("Primary");
-
-        // Подпись под буквой
-        StatusLabel.Text = result.Confidence >= 0.8f
-            ? $"Буква распознана"
-            : "Уточняется...";
-
-        // Прогресс-бар уверенности
+        StatusLabel.Text = result.Confidence >= 0.8f ? "Буква распознана" : "Уточняется...";
         ConfidenceBar.Progress = result.Confidence;
-        ConfidenceLabel.Text   = $"{result.ConfidencePercent}%";
-
-        // Меняем цвет прогресс-бара: зелёный если >80%, жёлтый иначе
+        ConfidenceLabel.Text = $"{result.ConfidencePercent}%";
         ConfidenceBar.ProgressColor = result.Confidence >= 0.8f
             ? GetResource<Color>("SuccessColor")
             : GetResource<Color>("WarningColor");
     }
 
-    /// <summary>Хелпер для получения ресурса из словаря по ключу.</summary>
     private static T GetResource<T>(string key)
     {
         if (Application.Current!.Resources.TryGetValue(key, out object? value) && value is T typed)

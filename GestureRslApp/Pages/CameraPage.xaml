@@ -13,10 +13,11 @@
 
             <!-- Виджет камеры на весь экран -->
             <camera:CameraView
-                x:Name="CameraViewControl"
-                HorizontalOptions="Fill"
-                VerticalOptions="Fill"
-                 />
+    x:Name="CameraViewControl"
+    HorizontalOptions="Fill"
+    VerticalOptions="Fill"
+    AutoSnapShotAsImageSource="False"
+    AutoSnapShotSeconds="0.2" />
 
             <!-- Рамка-подсказка: куда класть руку -->
             <Frame
