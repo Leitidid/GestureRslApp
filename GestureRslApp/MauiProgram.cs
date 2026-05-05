@@ -34,7 +34,7 @@ public static class MauiProgram
 
         // Сервис распознавания жестов — один экземпляр на всё приложение
         builder.Services.AddSingleton<HandGestureRecognizer>();
-
+       
         // Страницы — создаются заново при каждом переходе
         builder.Services.AddTransient<CameraPage>();
         builder.Services.AddTransient<HistoryPage>();
