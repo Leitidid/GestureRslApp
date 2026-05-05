@@ -5,34 +5,114 @@
              BackgroundColor="{StaticResource PageBackground}"
              Title="История">
 
-    <VerticalStackLayout
-        HorizontalOptions="Center"
-        VerticalOptions="Center"
-        Spacing="16"
-        Padding="32">
+    <Grid RowDefinitions="Auto, *, Auto">
 
-        <!-- Иконка-заглушка -->
-        <Label
-            Text="📋"
-            FontSize="64"
-            HorizontalOptions="Center" />
+        <!-- ── Заголовок с кнопкой очистки ── -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource CardBackground}"
+                StrokeShape="RoundRectangle 0,0,16,16"
+                Stroke="Transparent"
+                Padding="16,12">
+            <Grid ColumnDefinitions="*, Auto">
+                <VerticalStackLayout Grid.Column="0" Spacing="2">
+                    <Label Text="История распознавания"
+                           FontSize="{StaticResource FontSizeLarge}"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource PrimaryText}" />
+                    <Label x:Name="CountLabel"
+                           Text="0 записей"
+                           FontSize="{StaticResource FontSizeSmall}"
+                           TextColor="{StaticResource SecondaryText}" />
+                </VerticalStackLayout>
+                <Button Grid.Column="1"
+                        x:Name="ClearButton"
+                        Text="Очистить"
+                        FontSize="{StaticResource FontSizeSmall}"
+                        Clicked="OnClearClicked"
+                        VerticalOptions="Center"
+                        BackgroundColor="{StaticResource WarningColor}"
+                        Padding="12,6" />
+            </Grid>
+        </Border>
 
-        <!-- Заголовок -->
-        <Label
-            Text="История пуста"
-            FontSize="{StaticResource FontSizeLarge}"
-            FontAttributes="Bold"
-            TextColor="{StaticResource PrimaryText}"
-            HorizontalOptions="Center" />
+        <!-- ── Заглушка когда история пуста ── -->
+        <VerticalStackLayout x:Name="EmptyView"
+                             Grid.Row="1"
+                             HorizontalOptions="Center"
+                             VerticalOptions="Center"
+                             Spacing="12"
+                             Padding="32"
+                             IsVisible="True">
+            <Label Text="📋"
+                   FontSize="56"
+                   HorizontalOptions="Center" />
+            <Label Text="История пуста"
+                   FontSize="{StaticResource FontSizeLarge}"
+                   FontAttributes="Bold"
+                   TextColor="{StaticResource PrimaryText}"
+                   HorizontalOptions="Center" />
+            <Label Text="Распознанные жесты будут появляться здесь автоматически. Перейди на вкладку Камера и покажи жест."
+                   FontSize="{StaticResource FontSizeSmall}"
+                   TextColor="{StaticResource SecondaryText}"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center" />
+        </VerticalStackLayout>
 
-        <!-- Описание -->
-        <Label
-            Text="Здесь будут отображаться распознанные жесты. Функция будет доступна в следующей версии."
-            FontSize="{StaticResource FontSizeMedium}"
-            TextColor="{StaticResource SecondaryText}"
-            HorizontalOptions="Center"
-            HorizontalTextAlignment="Center" />
+        <!-- ── Список записей ── -->
+        <CollectionView x:Name="HistoryList"
+                        Grid.Row="1"
+                        IsVisible="False"
+                        Margin="0,8,0,0">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Border Margin="16,4"
+                            BackgroundColor="{StaticResource CardBackground}"
+                            StrokeShape="RoundRectangle 12"
+                            Stroke="Transparent"
+                            Padding="16,12">
+                        <Grid ColumnDefinitions="Auto, *, Auto" ColumnSpacing="12">
 
-    </VerticalStackLayout>
+                            <!-- Большая буква/слово -->
+                            <Label Grid.Column="0"
+                                   Text="{Binding Text}"
+                                   FontSize="36"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource Primary}"
+                                   VerticalOptions="Center"
+                                   MinimumWidthRequest="50" />
 
+                            <!-- Инфо -->
+                            <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
+                                <Label Text="{Binding TypeLabel}"
+                                       FontSize="{StaticResource FontSizeSmall}"
+                                       FontAttributes="Bold"
+                                       TextColor="{Binding TypeColor}" />
+                                <Label Text="{Binding TimeDisplay}"
+                                       FontSize="{StaticResource FontSizeSmall}"
+                                       TextColor="{StaticResource SecondaryText}" />
+                            </VerticalStackLayout>
+
+                            <!-- Уверенность -->
+                            <Label Grid.Column="2"
+                                   Text="{Binding ConfidencePercent, StringFormat='{0}%'}"
+                                   FontSize="{StaticResource FontSizeMedium}"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource SuccessColor}"
+                                   VerticalOptions="Center" />
+
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- ── Нижняя подсказка ── -->
+        <Label Grid.Row="2"
+               Text="Последние 100 жестов за сессию"
+               FontSize="{StaticResource FontSizeSmall}"
+               TextColor="{StaticResource SecondaryText}"
+               HorizontalOptions="Center"
+               Margin="0,4,0,8" />
+
+    </Grid>
 </ContentPage>

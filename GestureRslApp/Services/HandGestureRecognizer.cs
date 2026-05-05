@@ -8,126 +8,112 @@ using System.Text.Json;
 namespace GestureRslApp.Services;
 
 /// <summary>
-/// Главный сервис распознавания жестов РЖЯ.
+/// Сервис распознавания жестов РЖЯ.
+/// Загружает ДВЕ модели:
+///   1. static_gesture_model.onnx  — статические буквы (А Б В ... Я, 27 классов)
+///   2. dynamic_gesture_model.onnx — динамические буквы + слова (З Й К Ц Щ Ь + МАМА ПАПА ПРИВЕТ ПОКА)
 ///
-/// Пайплайн обработки каждого кадра:
-///   1. Получаем JPEG-байты с камеры.
-///   2. Декодируем, вырезаем центр, ресайзим до 224×224.
-///   3. Формируем тензор NHWC float32[1, 224, 224, 3] → hand_landmark_full.onnx.
-///   4. Читаем hand presence score: если < 0.5 — рука не найдена.
-///   5. Читаем 63 координаты (21 точка × x,y,z).
-///   6. Нормализуем: вычитаем запястье (точка 0) — «якорь».
-///   7. Применяем StandardScaler: (x - mean) / scale — параметры из JSON.
-///   8. Подаём float[1, 63] в gesture_model.onnx → логиты.
-///   9. Softmax + argmax → буква + уверенность.
+/// Пайплайн каждого кадра:
+///   1. DecodeAndResize  → SKBitmap 256×256
+///   2. RunLandmarkModel → 63 координаты (hand_landmark_full.onnx, КОД БЕЗ ИЗМЕНЕНИЙ)
+///   3. SubtractWristAnchor → нормализованные координаты
+///   4. RunStaticModel  → StaticResult (всегда, каждый кадр)
+///   5. FrameBuffer.Add(coords) → буфер 30 кадров
+///   6. Если буфер заполнен → RunDynamicModel → DynamicResult
+///   7. Возвращаем DynamicResult если он свежий и уверенный, иначе StaticResult.
 ///
 /// Необходимые файлы в Resources/Raw/:
-///   hand_landmark_full.onnx     — детектор ключевых точек руки (MediaPipe / PINTO)
-///   gesture_model.onnx          — классификатор жестов (обучен нами)
-///   gesture_model_meta.json     — порядок классов + параметры нормализации
-///
-/// Откуда взять hand_landmark_full.onnx:
-///   https://github.com/PINTO0309/PINTO_model_zoo/tree/main/033_Hand_Detection_and_Tracking
-///   Файл: hand_landmark_full_1x224x224.onnx → переименовать в hand_landmark_full.onnx
-///   Проверить входы/выходы можно на https://netron.app
+///   hand_landmark_full.onnx
+///   static_gesture_model.onnx   + static_gesture_classes.json
+///   dynamic_gesture_model.onnx  + dynamic_gesture_classes.json
 /// </summary>
 public class HandGestureRecognizer : IDisposable
 {
-    // ─── Параметры модели hand_landmark_full.onnx (PINTO build) ──────────
+    // ─── LANDMARK-МОДЕЛЬ (КОД НЕ ИЗМЕНЁН — НЕ ТРОГАТЬ) ──────────────────────
 
-    // Размер входного изображения
-    private const int InputImageSize = 256;
+    private const int    InputImageSize        = 256;
+    private const string LandmarkInputName     = "inputs:0";
+    private const string LandmarkOutputCoords  = "Identity_2:0";   // float32[1,63]
+    private const string LandmarkOutputScore   = "Identity:0";     // float32[1,1,1,1]
+    private const float  HandPresenceThreshold = 0.5f;
 
-    // ✅ Правильные имена по логам:
-    private const string LandmarkInputName = "inputs:0";
-    private const string LandmarkOutputCoords = "Identity_2:0";  // координаты [1×63]
-    private const string LandmarkOutputScore = "Identity:0";    // score [1×1×1×1]
+    // ─── ONNX-сессии ──────────────────────────────────────────────────────────
 
-    // Минимальный score для признания что рука найдена
-    private const float HandPresenceThreshold = 0.5f;
-
-    // ─── ONNX-сессии ──────────────────────────────────────────────────────
     private InferenceSession? _landmarkSession;
-    private InferenceSession? _gestureSession;
+    private InferenceSession? _staticSession;
+    private InferenceSession? _dynamicSession;
 
-    // ─── Метаданные модели ────────────────────────────────────────────────
-    private string[]? _classes;       // ["А", "Б", "В", "Г", "Д"]
-    private float[]? _scalerMean;     // 63 числа
-    private float[]? _scalerScale;    // 63 числа
+    // ─── Классы моделей ───────────────────────────────────────────────────────
+
+    private string[]? _staticClasses;    // ["А", "Б", ..., "Я"]
+    private string[]? _dynamicClasses;   // ["З", "Й", ..., "ПОКА"]
+
+    // ─── Набор слов (для IsWord) ──────────────────────────────────────────────
+
+    private static readonly HashSet<string> _words =
+        new(StringComparer.OrdinalIgnoreCase) { "МАМА", "ПАПА", "ПРИВЕТ", "ПОКА" };
+
+    // ─── Буфер кадров для динамической модели ────────────────────────────────
+
+    private const int DynamicSeqLen = 30;          // Длина последовательности
+    private const int DynamicRunEveryFrames = 10;  // Запускаем динамику каждые N кадров
+    private const float DynamicMinConfidence = 0.65f;
+    private const int DynamicResultExpiryMs = 2500;  // Показываем результат N мс
+
+    private readonly float[][] _frameBuffer = new float[DynamicSeqLen][];
+    private int  _bufferHead  = 0;    // Индекс для записи (циклический)
+    private int  _bufferFill  = 0;    // Сколько кадров записано (0..DynamicSeqLen)
+    private int  _framesSinceDynRun = 0;
+
+    private GestureResult? _lastDynamicResult;
+    private DateTime _dynamicResultTimestamp = DateTime.MinValue;
 
     private bool _isInitialized;
 
-    // ─── Инициализация ────────────────────────────────────────────────────
+    // ─── Инициализация ────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Загружает ONNX-файлы и метаданные.
-    /// Вызывать один раз при появлении CameraPage.
-    /// </summary>
     public async Task InitializeAsync()
     {
-        if (_isInitialized)
-        {
-            System.Diagnostics.Debug.WriteLine("[Recognizer] Already initialized");
-            return;
-        }
+        if (_isInitialized) return;
 
-        System.Diagnostics.Debug.WriteLine("[Recognizer] Starting initialization...");
+        System.Diagnostics.Debug.WriteLine("[Recognizer] Инициализация...");
 
-        try
-        {
-            // OnnxRuntime на Android требует путь к файлу, а не поток.
-            System.Diagnostics.Debug.WriteLine("[Recognizer] Extracting assets...");
+        string landmarkPath = await ExtractAssetToCache("hand_landmark_full.onnx");
+        string staticPath   = await ExtractAssetToCache("static_gesture_model.onnx");
+        string dynamicPath  = await ExtractAssetToCache("dynamic_gesture_model.onnx");
 
-            string landmarkPath = await ExtractAssetToCache("hand_landmark_full.onnx");
-            System.Diagnostics.Debug.WriteLine($"[Recognizer] Landmark model: {landmarkPath}");
+        string staticJson  = await ReadAssetTextAsync("static_gesture_classes.json");
+        string dynamicJson = await ReadAssetTextAsync("dynamic_gesture_classes.json");
 
-            string gesturePath = await ExtractAssetToCache("gesture_model.onnx");
-            System.Diagnostics.Debug.WriteLine($"[Recognizer] Gesture model: {gesturePath}");
+        var opts = new SessionOptions();
+        opts.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
 
-            string metaJson = await ReadAssetTextAsync("gesture_model_meta.json");
-            System.Diagnostics.Debug.WriteLine($"[Recognizer] Meta JSON length: {metaJson.Length}");
+        _landmarkSession = new InferenceSession(landmarkPath, opts);
+        _staticSession   = new InferenceSession(staticPath,   opts);
+        _dynamicSession  = new InferenceSession(dynamicPath,  opts);
 
-            var opts = new SessionOptions();
-            opts.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+        // Логирование имён входов/выходов landmark-модели (для отладки)
+        System.Diagnostics.Debug.WriteLine("[Recognizer] Landmark inputs:");
+        foreach (var kv in _landmarkSession.InputMetadata)
+            System.Diagnostics.Debug.WriteLine($"  '{kv.Key}'");
+        System.Diagnostics.Debug.WriteLine("[Recognizer] Landmark outputs:");
+        foreach (var kv in _landmarkSession.OutputMetadata)
+            System.Diagnostics.Debug.WriteLine($"  '{kv.Key}'");
 
-            System.Diagnostics.Debug.WriteLine("[Recognizer] Creating sessions...");
-            _landmarkSession = new InferenceSession(landmarkPath, opts);
-            System.Diagnostics.Debug.WriteLine("[Recognizer] Landmark session created ✓");
+        _staticClasses  = JsonSerializer.Deserialize<string[]>(staticJson)!;
+        _dynamicClasses = JsonSerializer.Deserialize<string[]>(dynamicJson)!;
 
-            _gestureSession = new InferenceSession(gesturePath, opts);
-            System.Diagnostics.Debug.WriteLine("[Recognizer] Gesture session created ✓");
-            // 🔥 ЛОГИРУЕМ ИМЕНА ВХОДОВ/ВЫХОДОВ МОДЕЛИ
-            System.Diagnostics.Debug.WriteLine("[DEBUG] Landmark model inputs:");
-            foreach (var input in _landmarkSession.InputMetadata)
-            {
-                System.Diagnostics.Debug.WriteLine($"  Input: '{input.Key}' -> {input.Value}");
-            }
+        System.Diagnostics.Debug.WriteLine(
+            $"[Recognizer] Статических классов: {_staticClasses.Length}");
+        System.Diagnostics.Debug.WriteLine(
+            $"[Recognizer] Динамических классов: {_dynamicClasses.Length}");
 
-            System.Diagnostics.Debug.WriteLine("[DEBUG] Landmark model outputs:");
-            foreach (var output in _landmarkSession.OutputMetadata)
-            {
-                System.Diagnostics.Debug.WriteLine($"  Output: '{output.Key}' -> {output.Value}");
-            }
-            ParseMetadata(metaJson);
-            System.Diagnostics.Debug.WriteLine($"[Recognizer] Classes loaded: {string.Join(", ", _classes)}");
-
-            _isInitialized = true;
-            System.Diagnostics.Debug.WriteLine("[Recognizer] Initialization complete! ✓");
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Recognizer] ERROR: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"[Recognizer] Stack: {ex.StackTrace}");
-            throw;
-        }
+        _isInitialized = true;
+        System.Diagnostics.Debug.WriteLine("[Recognizer] Готово ✓");
     }
 
-    // ─── Основной метод распознавания ─────────────────────────────────────
+    // ─── Основной метод (вызывается из CameraPage каждые 200мс) ──────────────
 
-    /// <summary>
-    /// Принимает JPEG-кадр с камеры, возвращает распознанный жест.
-    /// Потокобезопасен — вызывается из фонового потока.
-    /// </summary>
     public GestureResult Recognize(byte[] jpegBytes)
     {
         if (!_isInitialized || jpegBytes is not { Length: > 0 })
@@ -135,25 +121,47 @@ public class HandGestureRecognizer : IDisposable
 
         try
         {
-            // ── 1. Предобработка изображения ──────────────────────────────
+            // ── 1. Декодируем и ресайзим изображение ──────────────────────────
             using SKBitmap? resized = DecodeAndResize(jpegBytes);
             if (resized == null) return GestureResult.NoHand;
 
-            // ── 2. Детекция ключевых точек руки ───────────────────────────
+            // ── 2. Landmark-модель → координаты 21 точки ──────────────────────
             float[]? rawLandmarks = RunLandmarkModel(resized);
             if (rawLandmarks == null) return GestureResult.NoHand;
 
-            // ── 3. Нормализация координат (вычитаем якорь = запястье) ─────
+            // ── 3. Нормализация координат (вычитаем запястье как якорь) ───────
             float[] anchored = SubtractWristAnchor(rawLandmarks);
 
-            // ── 4. StandardScaler: (x - mean) / scale ─────────────────────
-            float[] scaled = ApplyScaler(anchored);
+            // ── 4. Статическая модель → результат для текущего кадра ──────────
+            GestureResult staticResult = RunStaticModel(anchored);
 
-            // ── 5. Классификация жеста ────────────────────────────────────
-            float[] logits = RunGestureModel(scaled);
+            // ── 5. Добавляем кадр в буфер для динамической модели ─────────────
+            AddToBuffer(anchored);
+            _framesSinceDynRun++;
 
-            // ── 6. Softmax + argmax → результат ───────────────────────────
-            return BuildResult(logits);
+            // ── 6. Динамическая модель (каждые DynamicRunEveryFrames кадров) ───
+            if (_bufferFill >= DynamicSeqLen && _framesSinceDynRun >= DynamicRunEveryFrames)
+            {
+                _framesSinceDynRun = 0;
+                GestureResult? dynResult = RunDynamicModel();
+                if (dynResult != null && dynResult.Confidence >= DynamicMinConfidence)
+                {
+                    _lastDynamicResult    = dynResult;
+                    _dynamicResultTimestamp = DateTime.Now;
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[Dynamic] {dynResult.Letter} ({dynResult.ConfidencePercent}%)");
+                }
+            }
+
+            // ── 7. Возвращаем динамический результат если он свежий ───────────
+            if (_lastDynamicResult != null)
+            {
+                var elapsed = (DateTime.Now - _dynamicResultTimestamp).TotalMilliseconds;
+                if (elapsed < DynamicResultExpiryMs)
+                    return _lastDynamicResult;
+            }
+
+            return staticResult;
         }
         catch (Exception ex)
         {
@@ -162,109 +170,69 @@ public class HandGestureRecognizer : IDisposable
         }
     }
 
-    // ─── Предобработка ────────────────────────────────────────────────────
+    // ─── Предобработка ────────────────────────────────────────────────────────
+    // (КОД НЕ ИЗМЕНЁН — идентичен рабочей версии)
 
-    /// <summary>
-    /// Декодирует JPEG, вырезает центральный квадрат (85% меньшей стороны),
-    /// ресайзит до 224×224. Возвращает null если декодирование не удалось.
-    /// </summary>
     private static SKBitmap? DecodeAndResize(byte[] jpegBytes)
     {
         using SKData data = SKData.CreateCopy(jpegBytes);
         using SKBitmap? src = SKBitmap.Decode(data);
         if (src == null) return null;
 
-        // Вырезаем центральный квадрат, чтобы рука не была деформирована
         int side = (int)(Math.Min(src.Width, src.Height) * 0.85f);
         int left = (src.Width  - side) / 2;
         int top  = (src.Height - side) / 2;
         var srcRect = new SKRectI(left, top, left + side, top + side);
 
-        var dst    = new SKBitmap(InputImageSize, InputImageSize, SKColorType.Rgba8888, SKAlphaType.Premul);
+        var dst = new SKBitmap(InputImageSize, InputImageSize, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(dst);
         canvas.DrawBitmap(src, srcRect, new SKRect(0, 0, InputImageSize, InputImageSize));
         return dst;
     }
 
-    // ─── Инференс: детектор ландмарков ────────────────────────────────────
+    // ─── Landmark-инференс ────────────────────────────────────────────────────
+    // (КОД НЕ ИЗМЕНЁН — идентичен рабочей версии)
 
-    /// <summary>
-    /// Запускает hand_landmark_full.onnx.
-    /// Формат входа: NHWC float32[1, 224, 224, 3], значения [0, 1].
-    /// Выходы:
-    ///   "Identity"   — float32[1, 63] координаты
-    ///   "Identity_1" — float32[1, 1]  score наличия руки
-    /// Возвращает null если рука не найдена.
-    /// </summary>
     private float[]? RunLandmarkModel(SKBitmap bitmap)
     {
-        System.Diagnostics.Debug.WriteLine($"[DEBUG] Input bitmap: {bitmap.Width}x{bitmap.Height}");
-
-        // Строим тензор NHWC [1, H, W, 3]
         int h = bitmap.Height, w = bitmap.Width;
         var tensor = new DenseTensor<float>(new[] { 1, h, w, 3 });
-
         for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
         {
-            for (int x = 0; x < w; x++)
-            {
-                SKColor px = bitmap.GetPixel(x, y);
-                // 🔥 ВАЖНО: порядок каналов должен быть RGB!
-                tensor[0, y, x, 0] = px.Red / 255f;
-                tensor[0, y, x, 1] = px.Green / 255f;
-                tensor[0, y, x, 2] = px.Blue / 255f;
-            }
+            SKColor px = bitmap.GetPixel(x, y);
+            tensor[0, y, x, 0] = px.Red   / 255f;
+            tensor[0, y, x, 1] = px.Green / 255f;
+            tensor[0, y, x, 2] = px.Blue  / 255f;
         }
 
         var inputs = new[] { NamedOnnxValue.CreateFromTensor(LandmarkInputName, tensor) };
-
         using var outputs = _landmarkSession!.Run(inputs);
 
-        // 🔥 ЛОГИРУЕМ ВЫХОДЫ
-        System.Diagnostics.Debug.WriteLine($"[DEBUG] Outputs count: {outputs.Count}");
-        foreach (var output in outputs)
+        System.Diagnostics.Debug.WriteLine($"[Landmark] Outputs: {outputs.Count}");
+        foreach (var o in outputs)
         {
-            var dims = string.Join("×", output.AsTensor<float>().Dimensions.ToArray());
-            System.Diagnostics.Debug.WriteLine($"[DEBUG] Output '{output.Name}': shape [{dims}]");
+            var dims = string.Join("×", o.AsTensor<float>().Dimensions.ToArray());
+            System.Diagnostics.Debug.WriteLine($"  '{o.Name}': [{dims}]");
         }
 
-        // 🔥 Читаем score руки
-        // 🔥 Читаем score руки
         var scoreTensor = outputs.First(o => o.Name == LandmarkOutputScore).AsTensor<float>();
-        // Форма [1×1×1×1] → нужно 4 индекса!
-        float score = scoreTensor[0, 0, 0, 0];
+        float score = scoreTensor[0, 0, 0, 0];   // Форма [1,1,1,1]
+        System.Diagnostics.Debug.WriteLine($"[Landmark] Score: {score:F3}");
 
-        System.Diagnostics.Debug.WriteLine($"[DEBUG] Hand score: {score:F3} (threshold: {HandPresenceThreshold})");
+        if (score < HandPresenceThreshold) return null;
 
-        if (score < HandPresenceThreshold)
-        {
-            System.Diagnostics.Debug.WriteLine($"[DEBUG] ❌ Hand NOT detected");
-            return null;
-        }
-
-        // 🔥 Читаем координаты
         var coordTensor = outputs.First(o => o.Name == LandmarkOutputCoords).AsTensor<float>();
-        // Форма [1×63] → нужно 2 индекса!
-        System.Diagnostics.Debug.WriteLine($"[DEBUG] Coord tensor shape: {string.Join(",", coordTensor.Dimensions.ToArray())}");
-
         float[] landmarks = new float[63];
         for (int i = 0; i < 63; i++)
-        {
-            landmarks[i] = coordTensor[0, i];  // ← 2 индекса, не 3!
-        }
-
-        System.Diagnostics.Debug.WriteLine($"[DEBUG] ✅ First 9 coords: {string.Join(", ", landmarks.Take(9).Select(v => v.ToString("F3")))}");
+            landmarks[i] = coordTensor[0, i];   // Форма [1,63]
 
         return landmarks;
     }
 
-    // ─── Нормализация координат ───────────────────────────────────────────
+    // ─── Нормализация ────────────────────────────────────────────────────────
+    // (КОД НЕ ИЗМЕНЁН)
 
-    /// <summary>
-    /// Вычитает координаты запястья (точка 0) из всех остальных точек.
-    /// Делает признаки инвариантными к позиции руки на экране.
-    /// Повторяет логику collect_from_images.py.
-    /// </summary>
     private static float[] SubtractWristAnchor(float[] raw)
     {
         float ax = raw[0], ay = raw[1], az = raw[2];
@@ -278,85 +246,109 @@ public class HandGestureRecognizer : IDisposable
         return result;
     }
 
-    // ─── StandardScaler ───────────────────────────────────────────────────
+    // ─── Статическая классификация ────────────────────────────────────────────
 
-    /// <summary>
-    /// Применяет нормализацию из gesture_model_meta.json:
-    ///   scaled[i] = (x[i] - mean[i]) / scale[i]
-    /// </summary>
-    private float[] ApplyScaler(float[] landmarks)
+    private GestureResult RunStaticModel(float[] anchored)
     {
-        float[] result = new float[63];
-        for (int i = 0; i < 63; i++)
-        {
-            float s = _scalerScale![i];
-            result[i] = s > 1e-8f ? (landmarks[i] - _scalerMean![i]) / s : 0f;
-        }
-        return result;
-    }
-
-    // ─── Инференс: классификатор жестов ──────────────────────────────────
-
-    /// <summary>
-    /// Запускает gesture_model.onnx.
-    /// Вход:  float32[1, 63].
-    /// Выход: float32[1, N_классов] — логиты.
-    /// </summary>
-    private float[] RunGestureModel(float[] scaled)
-    {
-        var tensor    = new DenseTensor<float>(scaled, new[] { 1, 63 });
-        string inName = _gestureSession!.InputMetadata.Keys.First();
-
+        var tensor = new DenseTensor<float>(anchored, new[] { 1, 63 });
+        string inName = _staticSession!.InputMetadata.Keys.First();
         var inputs = new[] { NamedOnnxValue.CreateFromTensor(inName, tensor) };
-        using var outputs = _gestureSession.Run(inputs);
+        using var outputs = _staticSession.Run(inputs);
 
         var logitsTensor = outputs.First().AsTensor<float>();
-        int n = _classes!.Length;
+        int n = _staticClasses!.Length;
         float[] logits = new float[n];
         for (int i = 0; i < n; i++)
             logits[i] = logitsTensor[0, i];
 
-        return logits;
+        return BuildResult(logits, _staticClasses, GestureType.Static);
     }
 
-    // ─── Интерпретация результата ─────────────────────────────────────────
+    // ─── Буфер кадров для динамической модели ────────────────────────────────
 
-    /// <summary>
-    /// Softmax над логитами, выбор класса с максимальной вероятностью.
-    /// </summary>
-    private GestureResult BuildResult(float[] logits)
+    private void AddToBuffer(float[] landmarks)
     {
-        // Softmax с вычитанием максимума для численной стабильности
-        float max  = logits.Max();
+        // Копируем координаты в буфер (избегаем утечки если массивы переиспользуются)
+        _frameBuffer[_bufferHead] = (float[])landmarks.Clone();
+        _bufferHead = (_bufferHead + 1) % DynamicSeqLen;
+        if (_bufferFill < DynamicSeqLen) _bufferFill++;
+    }
+
+    /// <summary>Возвращает буфер в хронологическом порядке как [30, 63] = 1890 float.</summary>
+    private float[] GetSequenceFlat()
+    {
+        float[] seq = new float[DynamicSeqLen * 63];
+        // Читаем начиная с самого старого кадра
+        int readHead = _bufferFill < DynamicSeqLen ? 0 : _bufferHead;
+        for (int i = 0; i < DynamicSeqLen; i++)
+        {
+            int idx = (readHead + i) % DynamicSeqLen;
+            if (_frameBuffer[idx] != null)
+                Array.Copy(_frameBuffer[idx], 0, seq, i * 63, 63);
+        }
+        return seq;
+    }
+
+    // ─── Динамическая классификация ───────────────────────────────────────────
+
+    private GestureResult? RunDynamicModel()
+    {
+        if (_dynamicSession == null || _dynamicClasses == null) return null;
+
+        try
+        {
+            float[] seqFlat = GetSequenceFlat();  // [1890]
+            // Модель ожидает [1, 30, 63]
+            var tensor = new DenseTensor<float>(seqFlat, new[] { 1, DynamicSeqLen, 63 });
+            string inName = _dynamicSession.InputMetadata.Keys.First();
+            var inputs = new[] { NamedOnnxValue.CreateFromTensor(inName, tensor) };
+            using var outputs = _dynamicSession.Run(inputs);
+
+            var logitsTensor = outputs.First().AsTensor<float>();
+            int n = _dynamicClasses.Length;
+            float[] logits = new float[n];
+            for (int i = 0; i < n; i++)
+                logits[i] = logitsTensor[0, i];
+
+            return BuildResult(logits, _dynamicClasses, GestureType.Dynamic);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Dynamic] Ошибка: {ex.Message}");
+            return null;
+        }
+    }
+
+    // ─── Softmax + argmax ─────────────────────────────────────────────────────
+
+    private static GestureResult BuildResult(float[] logits, string[] classes, GestureType type)
+    {
+        float max = logits.Max();
         float[] ex = logits.Select(l => MathF.Exp(l - max)).ToArray();
-        float sum  = ex.Sum();
+        float sum = ex.Sum();
         float[] probs = ex.Select(e => e / sum).ToArray();
 
         int best = Array.IndexOf(probs, probs.Max());
+        string letter = classes[best];
 
         return new GestureResult
         {
-            Letter       = _classes![best],
-            Confidence   = probs[best],
+            Letter = letter,
+            Confidence = probs[best],
             HandDetected = true,
+            Type = type,
+            // 🔥 IsWord вычисляется автоматически — НЕ присваиваем!
         };
     }
 
-    // ─── Загрузка ресурсов ────────────────────────────────────────────────
+    // ─── Загрузка ресурсов ────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Копирует файл из MauiAssets (Resources/Raw/) в CacheDirectory.
-    /// OnnxRuntime требует путь к файлу на диске, а не поток.
-    /// </summary>
     private static async Task<string> ExtractAssetToCache(string filename)
     {
         string cachePath = Path.Combine(FileSystem.CacheDirectory, filename);
-
-        // Всегда перезаписываем — чтобы обновлённая модель применялась сразу
         using Stream assetStream = await FileSystem.OpenAppPackageFileAsync(filename);
         using FileStream fileStream = File.Create(cachePath);
         await assetStream.CopyToAsync(fileStream);
-
         return cachePath;
     }
 
@@ -367,53 +359,29 @@ public class HandGestureRecognizer : IDisposable
         return await reader.ReadToEndAsync();
     }
 
-    // ─── Парсинг метаданных ───────────────────────────────────────────────
+    // ─── IDisposable ──────────────────────────────────────────────────────────
+    // 🔥 ДОБАВЛЕНО: Публичные методы для CameraPage
 
-    //private void ParseMetadata(string json)q
-    //{
-    //    using JsonDocument doc = JsonDocument.Parse(json);
-    //    JsonElement root = doc.RootElement;
-
-    //    // Порядок классов
-    //    var arr = root.GetProperty("classes");
-    //    _classes = new string[arr.GetArrayLength()];
-    //    for (int i = 0; i < _classes.Length; i++)
-    //        _classes[i] = arr[i].GetString()!;
-
-    //    // Параметры нормализации
-    //    var mean  = root.GetProperty("scaler_mean");
-    //    var scale = root.GetProperty("scaler_scale");
-    //    _scalerMean  = new float[63];
-    //    _scalerScale = new float[63];
-    //    for (int i = 0; i < 63; i++)
-    //    {
-    //        _scalerMean[i]  = mean[i].GetSingle();
-    //        _scalerScale[i] = scale[i].GetSingle();
-    //    }
-    //}
-    private void ParseMetadata(string json)
-{
-    // Твой JSON — это просто массив строк: ["А", "Б", "В", "Г", "Д"]
-    _classes = JsonSerializer.Deserialize<string[]>(json);
-    
-    // Создаем заглушки для scaler (так как их нет в твоем JSON)
-    _scalerMean = new float[63];
-    _scalerScale = new float[63];
-    
-    // Заполняем scaler_scale единицами (чтобы не было деления на 0)
-    for (int i = 0; i< 63; i++)
+    public float[]? ExtractLandmarks(byte[] jpegBytes)
     {
-        _scalerMean[i] = 0f;
-        _scalerScale[i] = 1f;
+        using SKBitmap? resized = DecodeAndResize(jpegBytes);
+        if (resized == null) return null;
+
+        float[]? rawLandmarks = RunLandmarkModel(resized);
+        if (rawLandmarks == null) return null;
+
+        return SubtractWristAnchor(rawLandmarks);
     }
-}
 
-    // ─── IDisposable ──────────────────────────────────────────────────────
-
+    public GestureResult ClassifyLandmarks(float[] anchored)
+    {
+        return RunStaticModel(anchored);
+    }
     public void Dispose()
     {
         _landmarkSession?.Dispose();
-        _gestureSession?.Dispose();
+        _staticSession?.Dispose();
+        _dynamicSession?.Dispose();
         GC.SuppressFinalize(this);
     }
 }

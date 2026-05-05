@@ -8,110 +8,107 @@
     <ScrollView>
         <VerticalStackLayout Spacing="0" Padding="0,16,0,32">
 
-            <!-- ── Раздел: Отображение ── -->
-            <Label
-                Text="ОТОБРАЖЕНИЕ"
-                FontSize="{StaticResource FontSizeSmall}"
-                TextColor="{StaticResource SecondaryText}"
-                Margin="20,0,20,8"
-                FontAttributes="Bold" />
+            <!-- ── ОТОБРАЖЕНИЕ ── -->
+            <Label Text="ОТОБРАЖЕНИЕ"
+                   FontSize="{StaticResource FontSizeSmall}"
+                   TextColor="{StaticResource SecondaryText}"
+                   FontAttributes="Bold"
+                   Margin="20,0,20,8" />
 
-            <!-- Карточка настроек -->
-            <Border
-                Margin="16,0"
-                BackgroundColor="{StaticResource CardBackground}"
-                StrokeShape="RoundRectangle 16"
-                Stroke="Transparent">
-
+            <Border Margin="16,0"
+                    BackgroundColor="{StaticResource CardBackground}"
+                    StrokeShape="RoundRectangle 16"
+                    Stroke="Transparent">
                 <VerticalStackLayout>
 
-                    <!-- Режим для слабовидящих 
-                    <Grid
-                        Padding="16,14"
-                        ColumnDefinitions="*,Auto">
-
-                        <VerticalStackLayout Grid.Column="0" Spacing="2">
-                            <Label
-                                Text="Режим для слабовидящих"
-                                FontSize="{StaticResource FontSizeMedium}"
-                                FontAttributes="Bold"
-                                TextColor="{StaticResource PrimaryText}" />
-                            <Label
-                                Text="Высокий контраст, крупный текст"
-                                FontSize="{StaticResource FontSizeSmall}"
-                                TextColor="{StaticResource SecondaryText}" />
-                        </VerticalStackLayout>
-
-                        <Switch
-                            x:Name="HighContrastSwitch"
-                            Grid.Column="1"
-                            OnColor="{StaticResource Primary}"
-                            VerticalOptions="Center"
-                             />
-                    </Grid>
-                   Toggled="OnHighContrastToggled"-->
-                    <!-- Разделитель -->
-                    <BoxView
-                        HeightRequest="1"
-                        Color="{StaticResource DividerColor}"
-                        Margin="16,0" />
-
-                    <!-- Подсказка о теме -->
+                    <!-- Режим для слабовидящих -->
                     <Grid Padding="16,14" ColumnDefinitions="*,Auto">
                         <VerticalStackLayout Grid.Column="0" Spacing="2">
-                            <Label
-                                Text="Тема приложения"
-                                FontSize="{StaticResource FontSizeMedium}"
-                                FontAttributes="Bold"
-                                TextColor="{StaticResource PrimaryText}" />
-                            <Label
-                                Text="Светлая тема"
-                                FontSize="{StaticResource FontSizeSmall}"
-                                TextColor="{StaticResource SecondaryText}" />
+                            <Label Text="Режим для слабовидящих"
+                                   FontSize="{StaticResource FontSizeMedium}"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource PrimaryText}" />
+                            <Label Text="Высокий контраст, крупный шрифт"
+                                   FontSize="{StaticResource FontSizeSmall}"
+                                   TextColor="{StaticResource SecondaryText}" />
                         </VerticalStackLayout>
-                        <Label
-                            Grid.Column="1"
-                            Text="☀️"
-                            FontSize="24"
-                            VerticalOptions="Center" />
+                        <Switch x:Name="HighContrastSwitch"
+                                Grid.Column="1"
+                                OnColor="{StaticResource Primary}"
+                                VerticalOptions="Center"
+                                Toggled="OnHighContrastToggled" />
+                    </Grid>
+
+                    <BoxView HeightRequest="1"
+                             Color="{StaticResource DividerColor}"
+                             Margin="16,0" />
+
+                    <!-- Текущая тема -->
+                    <Grid Padding="16,14" ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout Grid.Column="0" Spacing="2">
+                            <Label Text="Тема приложения"
+                                   FontSize="{StaticResource FontSizeMedium}"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource PrimaryText}" />
+                            <Label x:Name="ThemeLabel"
+                                   Text="Светлая тема"
+                                   FontSize="{StaticResource FontSizeSmall}"
+                                   TextColor="{StaticResource SecondaryText}" />
+                        </VerticalStackLayout>
+                        <Label x:Name="ThemeIcon"
+                               Grid.Column="1"
+                               Text="☀️"
+                               FontSize="24"
+                               VerticalOptions="Center" />
                     </Grid>
 
                 </VerticalStackLayout>
             </Border>
 
-            <!-- ── Раздел: О приложении ── -->
-            <Label
-                Text="О ПРИЛОЖЕНИИ"
-                FontSize="{StaticResource FontSizeSmall}"
-                TextColor="{StaticResource SecondaryText}"
-                Margin="20,24,20,8"
-                FontAttributes="Bold" />
+            <!-- ── О ПРИЛОЖЕНИИ ── -->
+            <Label Text="О ПРИЛОЖЕНИИ"
+                   FontSize="{StaticResource FontSizeSmall}"
+                   TextColor="{StaticResource SecondaryText}"
+                   FontAttributes="Bold"
+                   Margin="20,24,20,8" />
 
-            <Border
-                Margin="16,0"
-                BackgroundColor="{StaticResource CardBackground}"
-                StrokeShape="RoundRectangle 16"
-                Stroke="Transparent">
-
+            <Border Margin="16,0"
+                    BackgroundColor="{StaticResource CardBackground}"
+                    StrokeShape="RoundRectangle 16"
+                    Stroke="Transparent">
                 <VerticalStackLayout Padding="16,14" Spacing="8">
-                    <Label
-                        Text="Распознавание РЖЯ"
-                        FontSize="{StaticResource FontSizeMedium}"
-                        FontAttributes="Bold"
-                        TextColor="{StaticResource PrimaryText}" />
-                    <Label
-                        Text="Версия 1.0"
-                        FontSize="{StaticResource FontSizeSmall}"
-                        TextColor="{StaticResource SecondaryText}" />
-                    <Label
-                        Text="Дипломный проект — распознавание 5 букв дактильного алфавита Русского Жестового Языка на Android с помощью нейросети."
-                        FontSize="{StaticResource FontSizeSmall}"
-                        TextColor="{StaticResource SecondaryText}" />
-                    <Label
-                        Text="Поддерживаемые буквы: А, Б, В, Г, Д"
-                        FontSize="{StaticResource FontSizeSmall}"
-                        TextColor="{StaticResource Primary}"
-                        FontAttributes="Bold" />
+                    <Label Text="Распознавание РЖЯ"
+                           FontSize="{StaticResource FontSizeMedium}"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource PrimaryText}" />
+                    <Label Text="Версия 2.0 — Полный алфавит + динамические жесты"
+                           FontSize="{StaticResource FontSizeSmall}"
+                           TextColor="{StaticResource SecondaryText}" />
+                    <BoxView HeightRequest="1" Color="{StaticResource DividerColor}" Margin="0,4" />
+                    <Label Text="Статические буквы (27):"
+                           FontSize="{StaticResource FontSizeSmall}"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource PrimaryText}" />
+                    <Label Text="А Б В Г Д Е Ё Ж И Л М Н О П Р С Т У Ф Х Ч Ш Ъ Ы Э Ю Я"
+                           FontSize="{StaticResource FontSizeSmall}"
+                           TextColor="{StaticResource SecondaryText}" />
+                    <Label Text="Динамические буквы (6):"
+                           FontSize="{StaticResource FontSizeSmall}"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource PrimaryText}"
+                           Margin="0,4,0,0" />
+                    <Label Text="З  Й  К  Ц  Щ  Ь"
+                           FontSize="{StaticResource FontSizeSmall}"
+                           TextColor="{StaticResource SecondaryText}" />
+                    <Label Text="Динамические слова (4):"
+                           FontSize="{StaticResource FontSizeSmall}"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource PrimaryText}"
+                           Margin="0,4,0,0" />
+                    <Label Text="МАМА  ПАПА  ПРИВЕТ  ПОКА"
+                           FontSize="{StaticResource FontSizeSmall}"
+                           TextColor="{StaticResource Primary}"
+                           FontAttributes="Bold" />
                 </VerticalStackLayout>
             </Border>
 

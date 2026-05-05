@@ -27,6 +27,11 @@ public static class MauiProgram
 
         // ─── Регистрация сервисов (Dependency Injection) ───────────────────
 
+        // 🔥 ДОБАВЛЕНО: Регистрация HistoryService
+        builder.Services.AddSingleton<HistoryService>();
+
+        builder.Services.AddSingleton<DynamicGestureRecognizer>();
+
         // Сервис распознавания жестов — один экземпляр на всё приложение
         builder.Services.AddSingleton<HandGestureRecognizer>();
 

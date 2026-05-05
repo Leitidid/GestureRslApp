@@ -63,7 +63,103 @@
                     FontSize="{StaticResource FontSizeMedium}"
                     HorizontalOptions="Center" />
             </VerticalStackLayout>
+            <!-- Добавь ЭТО после LoadingOverlay и перед закрывающим </Grid> верхней части -->
 
+            <!-- Кнопки переключения режимов -->
+            <HorizontalStackLayout 
+    x:Name="ModeButtons"
+    HorizontalOptions="Center" 
+    VerticalOptions="End"
+    Margin="0,0,0,140"
+    Spacing="12"
+    IsVisible="False">
+
+                <Button 
+        x:Name="BtnStatic"
+        Text="Статичные"
+        Clicked="OnStaticModeClicked"
+        BackgroundColor="{StaticResource Primary}"
+        TextColor="White"
+        Padding="16,8"
+        CornerRadius="8" />
+
+                <Button 
+        x:Name="BtnDynamic"
+        Text="Динамические"
+        Clicked="OnDynamicModeClicked"
+        BackgroundColor="#40FFFFFF"
+        TextColor="White"
+        Padding="16,8"
+        CornerRadius="8" />
+            </HorizontalStackLayout>
+
+            <!-- Кнопка записи динамического жеста -->
+            <Button 
+    x:Name="RecordButton"
+    Text="Записать жест"
+    HorizontalOptions="Center"
+    VerticalOptions="Center"
+    BackgroundColor="{StaticResource SuccessColor}"
+    TextColor="White"
+    Padding="24,12"
+    CornerRadius="12"
+    FontSize="{StaticResource FontSizeMedium}"
+    IsVisible="False"
+    Clicked="OnRecordClicked" />
+
+            <!-- Оверлей записи -->
+            <VerticalStackLayout 
+    x:Name="RecordingOverlay"
+    HorizontalOptions="Center"
+    VerticalOptions="Center"
+    Spacing="16"
+    IsVisible="False"
+    BackgroundColor="#80000000"
+    Padding="32"
+   >
+
+                <Label 
+        x:Name="RecordingCountdownLabel"
+        Text="3"
+        FontSize="72"
+        TextColor="White"
+        HorizontalOptions="Center"
+        FontAttributes="Bold" />
+
+                <Label 
+        x:Name="RecordingStatusLabel"
+        Text="Приготовьтесь..."
+        FontSize="{StaticResource FontSizeMedium}"
+        TextColor="White"
+        HorizontalOptions="Center" />
+            </VerticalStackLayout>
+
+            <!-- Кнопка сохранения в историю -->
+            <Button 
+    x:Name="SaveToHistoryBtn"
+    Text="Сохранить в историю"
+    HorizontalOptions="Center"
+    VerticalOptions="End"
+    Margin="0,0,0,20"
+    BackgroundColor="{StaticResource PrimaryLight}"
+    TextColor="{StaticResource PrimaryText}"
+    Padding="16,8"
+    CornerRadius="8"
+    IsVisible="False"
+    Clicked="OnSaveToHistoryClicked" />
+
+            <!-- Подсказка -->
+            <Label 
+    x:Name="HintLabel"
+    Text="Поместите руку в рамку"
+    HorizontalOptions="Center"
+    VerticalOptions="Start"
+    Margin="0,80,0,0"
+    TextColor="White"
+    FontSize="{StaticResource FontSizeSmall}"
+    BackgroundColor="#80000000"
+    Padding="12,6"
+    />
         </Grid>
 
         <!-- ── Нижняя панель результата ── -->
